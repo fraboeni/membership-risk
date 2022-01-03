@@ -1,11 +1,12 @@
 import tensorflow as tf
 
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, GlobalAveragePooling2D, UpSampling2D
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, GlobalAveragePooling2D, UpSampling2D, \
+    InputLayer, Softmax
 
 
 class CIFAR10_CNN(tf.keras.Model):
 
-    def __init__(self):
+    def __init__(self, from_logits=True):
         super().__init__()
         self.conv11 = Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=(32, 32, 3))
         self.conv12 = Conv2D(32, (3, 3), activation='relu', padding='same')
@@ -25,7 +26,11 @@ class CIFAR10_CNN(tf.keras.Model):
         self.flat = Flatten()
         self.dense1 = Dense(128, activation='relu')
         self.dropout4 = Dropout(0.2)
-        self.dense2 = Dense(10, activation='softmax')
+        if from_logits:
+            self.dense2 = Dense(10)
+        else:
+            self.dense2 = Dense(10, activation='softmax')
+
 
     def call(self, inputs, training=False):
         x = self.conv11(inputs)
@@ -50,12 +55,14 @@ class CIFAR10_CNN(tf.keras.Model):
         x = self.dense1(x)
         if training:
             x = self.dropout4(x, training=training)
-        return self.dense2(x)
+        x = self.dense2(x)
+
+        return x
 
 
 class CIFAR10_ResNet50(tf.keras.Model):
 
-    def __init__(self):
+    def __init__(self, from_logits=True):
         super().__init__()
         self.feature_extractor = tf.keras.applications.resnet.ResNet50(input_shape=(224, 224, 3),
                                                                        include_top=False,
@@ -64,7 +71,10 @@ class CIFAR10_ResNet50(tf.keras.Model):
         self.flatten = Flatten()
         self.dense1 = Dense(1024, activation='relu')
         self.dense2 = Dense(512, activation='relu')
-        self.dense3 = Dense(10, activation="softmax")
+        if from_logits:
+            self.dense2 = Dense(10)
+        else:
+            self.dense2 = Dense(10, activation='softmax')
 
     def call(self, inputs, training=False, base_trainable=False):
         x = UpSampling2D(size=(7, 7))(inputs)  # upsample 32, 32 to 224, 224 by multiplying with factor 7
@@ -75,7 +85,9 @@ class CIFAR10_ResNet50(tf.keras.Model):
         x = self.flatten(x)
         x = self.dense1(x)
         x = self.dense2(x)
-        return self.dense3(x)
+        x = self.dense3(x)
+
+        return x
 
 
 # class FMNIST_CNN(tf.keras.Model):

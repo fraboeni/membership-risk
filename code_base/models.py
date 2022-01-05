@@ -1,7 +1,6 @@
 import tensorflow as tf
 
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, GlobalAveragePooling2D, UpSampling2D, \
-    InputLayer, Softmax
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, GlobalAveragePooling2D, UpSampling2D
 
 
 class CIFAR10_CNN(tf.keras.Model):

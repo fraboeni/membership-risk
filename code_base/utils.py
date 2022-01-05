@@ -39,16 +39,16 @@ def l2_dist(a, b):
     return np.linalg.norm(a - b)
 
 
-def generate_neighboring_points(data_sample, epsilon, amount, noise_vectors=None, scale=0.1):
+def generate_neighboring_points(data_sample, amount, epsilon=None, noise_vectors=None, scale=0.1):
     """
     This function is given a data point data_sample and it generates amount many data points in an epsilon neighborhood
     scale is given to the noise function to sample the random noise
     :param data_sample: the data point for which we want to generate neighbors
-    :param epsilon: how far the neighbors should be away in an L2 norm
     :param amount: how many neighbors to generate
+    :param epsilon: how far the neighbors should be away in an L2 norm, if not specified, no further clipping is performed
     :param noise_vectors: if we want deterministic noise vectors for neighbor creation, we can pass them here
     :param scale: the sigma for the normal noise distribution
-    :return: an array of the generated neighbors
+    :return: an array of the generated neighbors all in range [0,1]
     """
     l2_dist = LpDistance(2)
     shape = (amount,) + data_sample.shape  # make a shape of [amount, ax1, ax2, ax3]
@@ -67,20 +67,21 @@ def generate_neighboring_points(data_sample, epsilon, amount, noise_vectors=None
 
     # and make sure that perturbation does not exceed epsilon
     # the clip function cannot deal with np broadcasts
-    repeated_data = np.repeat(data_sample, amount, axis=0)  # therefore, repeat sample
+    if epsilon is not None:
+        repeated_data = np.repeat(data_sample, amount, axis=0)  # therefore, repeat sample
 
-    # the following line is for debugging purpose only:
-    a = l2_dist(repeated_data, perturbed_samples_clip)
+        # the following line is for debugging purpose only:
+        a = l2_dist(repeated_data, perturbed_samples_clip)
 
-    perturbed_samples_clip_eps = l2_dist.clip_perturbation(repeated_data, perturbed_samples_clip, epsilon)
+        perturbed_samples_clip = l2_dist.clip_perturbation(repeated_data, perturbed_samples_clip, epsilon)
 
-    b = l2_dist(repeated_data, perturbed_samples_clip_eps)
-    c = np.isclose(b, epsilon)  # it's floats so check for every element if roughly the same as epsilon
-    # if one is not true, the neighbors might be at the wrong distance
-    assert np.all(c), \
-        "Your perturbed samples do not seem to have the distance to the original ones that you specified with epsilon. " \
-        "This might be the case if scale is small and epsilon large"
-    return perturbed_samples_clip_eps
+        b = l2_dist(repeated_data, perturbed_samples_clip)
+        c = np.isclose(b, epsilon)  # it's floats so check for every element if roughly the same as epsilon
+        # if one is not true, the neighbors might be at the wrong distance
+        assert np.all(c), \
+            "Your perturbed samples do not seem to have the distance to the original ones that you specified with epsilon. " \
+            "This might be the case if scale is small and epsilon large"
+    return perturbed_samples_clip
 
 
 def evaluate_model_acc(model, data, labels):
@@ -127,7 +128,6 @@ def calculate_l2_distances(neighbors, original):
     mses_train_l2 = []
     for i in range(NUM_DATA_POINTS):
         dists = []
-        stds = []
         mses = []
         # this could be vectorized
         for j in range(NUM_NEIGHBORS):
@@ -143,56 +143,44 @@ def calculate_l2_distances(neighbors, original):
 
 def calculate_var_mean_std_at_correct_class(neighbors, correct_cls, num_classes=10):
     """
-
+    Otherwise the mean/var/std is calculated at every class. But that might not be so expressive. Hence, this function
+    extracts the respective scores per data point only for the correct class
     :param neighbors: logits of model predictions on neighbors, np.array in shape (NUM_DATA_POINTS, NUM_NEIGHBORS, num_classes)
     :param correct_cls: the correct classes for the neighbors, np.array in shape (NUM_DATA_POINTS,)
-    :return: an array of shape (NUM_DATA_POINTS,3) with the variance, mean, and std among the neighbors, only for the correct class
+    :return: arrays of shape (NUM_DATA_POINTS,1) for 1) the variance, 2) mean, and 3) std among the neighbors, only for the correct class
     """
 
-    NUM_DATA_POINTS = neighbors.shape[0]
-    NUM_NEIGHBORS = neighbors.shape[1]
+    # calculate these values over all classes
+    varis, means, stds = calculate_var_mean_std(neighbors)
 
-    # calculate these values over all classes -> have them flattened
-    all_classes_metrics = calculate_var_mean_std(neighbors)
+    # correct class indices
+    var_indices = correct_cls.astype(int)
 
-    var_indices = correct_cls.astype(int)  # repeated labels -> yields var at correct class
-    mean_indices = (var_indices + num_classes).astype(int)  # the mean of correct class is found num_classes later
-    std_indices = (var_indices + 2 * num_classes).astype(int)  # the variance is found two later
+    # per row (data point) choose the correct class' metrics
+    varis_arr = np.choose(var_indices, varis.T)
+    means_arr = np.choose(var_indices, means.T)
+    stds_arr = np.choose(var_indices, stds.T)
 
-    take_indices = np.stack((var_indices, mean_indices, std_indices), axis=-1)
-
-    # for now slow way; later fancy indexing
-    metrics = []
-    for i in range(NUM_DATA_POINTS):
-        metric = all_classes_metrics[i][take_indices[i, :]]
-        metrics.append(metric)
-
-    # metrics = np.take(all_classes_metrics, np.transpose(take_indices))
-    # metrics = np.take(all_classes_metrics, take_indices)
-    # metrics = all_classes_metrics[take_indices] # now select values at these classes
-    # rows= np.arange(NUM_DATA_POINTS).astype(int)
-    # metrics = all_classes_metrics[rows, take_indices]
-    metrics = np.asarray(metrics)
-    return metrics
+    return varis_arr, means_arr, stds_arr
 
 
 def calculate_var_mean_std(neighbors):
     """
-    Calculates the variance within all neighbors per specific data point
+    Calculates the variance, mean, and std within all neighbors per specific data point
     :param neighbors: logits of model predictions on neighbors, np.array in shape (NUM_DATA_POINTS, NUM_NEIGHBORS, num_classes)
-    :return: array of variances, mean, and std in the neighbor per original data point
+    :return: arrays of shape (NUM_DATA_POINTS, NUM_CLASSES) for 1) variances, 2) mean, and 3) std in the neighbors per
+    original data point per class.
     """
     NUM_DATA_POINTS = neighbors.shape[0]
-    vars_train_l2 = []
+    varis = []
+    means = []
+    stds = []
     for i in range(NUM_DATA_POINTS):
-        var = np.array([
-            # neighbors[i].flatten(),
-            np.var(neighbors[i], axis=0),
-            np.mean(neighbors[i], axis=0),
-            np.std(neighbors[i], axis=0),
-        ]).flatten()
-        vars_train_l2.append(var)
-    return vars_train_l2
+        varis.append(np.var(neighbors[i], axis=0))
+        means.append(np.mean(neighbors[i], axis=0))
+        stds.append(np.std(neighbors[i], axis=0))
+
+    return np.asarray(varis), np.asarray(means), np.asarray(stds)
 
 
 def flatten_neighbors_predictions(neighbors):

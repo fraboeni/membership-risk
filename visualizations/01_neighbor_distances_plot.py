@@ -12,7 +12,7 @@ result_dict = pickle.load(open( result_dir+"metrics.pkl", "rb" ))
 # extract general information
 num_samples = result_dict['num_samples']
 train_acc = result_dict['train_acc']
-test_acc = train_acc - 0.0154#result_dict['test_acc']
+test_acc = result_dict['test_acc']
 
 SCALES = [0.01, 0.05, 0.1, 0.2]
 

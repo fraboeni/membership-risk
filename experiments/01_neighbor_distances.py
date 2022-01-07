@@ -1,12 +1,11 @@
 import os
-import tensorflow as tf
+import pickle
 
-import matplotlib.pyplot as plt
+import tensorflow as tf
 from sklearn.metrics import accuracy_score
 
 from code_base.get_data import get_data
 from code_base.utils import *
-from code_base.models import MODELS
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -17,11 +16,10 @@ WIDTH = 32
 HEIGHT = 32
 DEPTH = 3
 
-SCALES = [0.01, 0.05, 0.1, 0.2]
+SCALES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2]
 NUM_NEIGHBORS = 100
 
-
-members, _ = get_data('cifar10', augmentation=False, batch_size=NUM_DATA_POINTS, indices_to_use=range(0,25000))
+members, _ = get_data('cifar10', augmentation=False, batch_size=NUM_DATA_POINTS, indices_to_use=range(0, 25000))
 non_members, _ = get_data('cifar10', augmentation=False, batch_size=NUM_DATA_POINTS, indices_to_use=range(25000, 50000))
 
 # get NUM_DATA_POINTS many neighbors
@@ -34,16 +32,11 @@ b = non_members.next()
 non_mem = b[0]
 non_mem_lab = b[1]
 
-
 # train and test acc
 train_acc = model.evaluate(members)[1]
 test_acc = model.evaluate(non_members)[1]
 
-result_dict = {}
-result_dict['train_acc'] = (train_acc)
-result_dict['test_acc'] = (test_acc)
-result_dict['num_samples'] = NUM_DATA_POINTS
-#result_dict['noise_scale'] = SCALE
+result_dict = {'train_acc': (train_acc), 'test_acc': (test_acc), 'num_samples': NUM_DATA_POINTS}
 
 for scale in SCALES:
     print(scale)
@@ -113,5 +106,4 @@ for scale in SCALES:
     result_dict[scale] = sub_dict
 
 result_dir = os.getcwd() + '/../log_dir/result_data/exp01/'
-import pickle
-pickle.dump( result_dict, open( result_dir+"metrics.pkl", "wb" ) )
+pickle.dump(result_dict, open(result_dir + "metrics.pkl", "wb"))

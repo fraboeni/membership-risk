@@ -66,20 +66,17 @@ def generate_neighboring_points(data_sample, amount, epsilon=None, noise_vectors
     perturbed_samples_clip = np.clip(perturbed_samples, 0, 1)  # bring them to range 0,1
 
     # and make sure that perturbation does not exceed epsilon
-    # the clip function cannot deal with np broadcasts
     if epsilon is not None:
-        repeated_data = np.repeat(data_sample, amount, axis=0)  # therefore, repeat sample
-
-        # the following line is for debugging purpose only:
-        a = l2_dist(repeated_data, perturbed_samples_clip)
-
+        repeated_data = np.repeat(data_sample, amount, axis=0)
         perturbed_samples_clip = l2_dist.clip_perturbation(repeated_data, perturbed_samples_clip, epsilon)
 
-        b = l2_dist(repeated_data, perturbed_samples_clip)
-        c = np.isclose(b, epsilon)  # it's floats so check for every element if roughly the same as epsilon
+        # make sure that we meet the required L2 distance and are not smaller
+        l2_distances = l2_dist(repeated_data, perturbed_samples_clip)
+        is_far_enough = np.isclose(l2_distances, epsilon)
         # if one is not true, the neighbors might be at the wrong distance
-        assert np.all(c), \
-            "Your perturbed samples do not seem to have the distance to the original ones that you specified with epsilon. " \
+        assert np.all(is_far_enough), \
+            "Your perturbed samples do not seem to have the distance to the original ones that you specified with " \
+            "epsilon. " \
             "This might be the case if scale is small and epsilon large"
     return perturbed_samples_clip
 
@@ -195,3 +192,77 @@ def flatten_neighbors_predictions(neighbors):
         var = neighbors[i].flatten()
         vars_train_l2.append(var)
     return vars_train_l2
+
+
+def class_consistency(logits_datapoints, logits_neighbors):
+    """
+    Given the logits for some data points and their respective neighbors: first calculates the prediction order of
+    classes for the data points (from highest confidence to lowest confidence).
+    Then calculates per data point and per class what percentage of neighbors have the same predicted class at the
+    respective index in the order of confidences
+    :param logits_datapoints: np.array of shape (num_datapoints, classes) Original data points.
+    :param logits_neighbors: np.array of shape (num_datapoints, num_neighbors, num_classes) Respective neighbors.
+    :return: np.array of shape (num_datapoints, num_classes): percentage of neighbors whose prediction at the given
+    confidence index matches the original prediction
+    """
+
+    # calculate the order of the predicted class for the original data points and the neighbors
+    ground_truth_order = np.argsort(-1 * logits_datapoints, axis=1)  # we need to do *-1 to have descending order
+    neighbor_order = np.argsort(-1 * logits_neighbors, axis=2)
+
+    num_neighbors = neighbor_order.shape[1]
+    # repeat the elements in the ground truth for more efficient np-based comparison
+    ground_truth_order_aug = np.repeat(ground_truth_order, num_neighbors, axis=0).reshape(neighbor_order.shape)
+    # calculate consistency based on for how many neighbors the class predictions match
+    equal = np.equal(ground_truth_order_aug, neighbor_order)
+    consistency = np.mean(equal, axis=1)
+
+    return consistency
+
+
+def distance_until_class_change(logits_orig_train_arr, list_logits_neighbors):
+    """
+    Given the logits for some data points and a list of arrays containing their respective neighbors, for example
+    a list with different neighbors generated with different noise scales: calculates the first index in list where
+    the model prediction on the original data point does not match the prediction of one of the neighbors.
+    This might allow to estimate a data point's distance to the decision boundary.
+    For the function to yield meaningful results, the list_logits_neighbors needs to contain the neighbors in an order
+    (e.g. neighbors with noise scales [0.01, 0.05, 0.1]).
+    This is because we use the indices(and return the first one) where a change in the neighbors appears.
+    If no change in any neighbors occurs for a given data point, the result for it will be -1.
+    :param logits_orig_train_arr: np.array of shape (num_datapoints, classes) Original data points.
+    :param list_logits_neighbors: list of np.arrays of shape (num_datapoints, num_neighbors, num_classes)
+        Respective neighbors generated with different functions
+    :return: np.array of shape (num_datapoints, len(list_logits_neighbors)):
+        array containing per data point the first index where a different class than the original one was predicted
+        for at least one of its neighbors. If no mismatch occurs, the default value is -1.
+    """
+
+    # make a numpy array out of the list for more efficient computation
+    stuck = np.stack(list_logits_neighbors)
+    print(stuck.shape)
+    neighbor_labels = np.argmax(stuck, axis=3)
+
+    # get the original classes
+    ground_truth_clas = np.argmax(logits_orig_train_arr, axis=1)
+    # for easier broadcasting in comparison repeat labels
+    num_datapoints = logits_orig_train_arr.shape[0]
+    num_neighbors = list_logits_neighbors[0].shape[1]
+
+    ground_truth_clas_repeat = np.repeat(ground_truth_clas, num_neighbors, axis=0).reshape(neighbor_labels.shape[1:])
+    print(ground_truth_clas_repeat.shape)
+
+    # compare where the neighbors labes deviate from the original labels
+    non_equal = ~np.equal(neighbor_labels, ground_truth_clas_repeat)
+
+    # creates array of shape (len(list_logits_neighbors), num_datapoints)
+    # True values indicate that among the neighbor array at the given index there was one or more mismatch
+    mismatch_indices = np.any(non_equal, axis=2)
+
+    # obtain a mask specifying for each data point if there is a label mismatch
+    data_points_that_have_missmatch = np.any(mismatch_indices, axis=0)
+
+    # get the earliest index where this mismatch happens, when there is no mismatch, we have default value -1
+    default = np.ones(num_datapoints) * (-1)
+    default[data_points_that_have_missmatch] = np.argmax(mismatch_indices == 1, axis=0)[data_points_that_have_missmatch]
+    return default

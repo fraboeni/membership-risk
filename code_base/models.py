@@ -71,11 +71,11 @@ class CIFAR10_ResNet50(tf.keras.Model):
         self.dense1 = Dense(1024, activation='relu')
         self.dense2 = Dense(512, activation='relu')
         if from_logits:
-            self.dense2 = Dense(10)
+            self.dense3 = Dense(10)
         else:
-            self.dense2 = Dense(10, activation='softmax')
+            self.dense3 = Dense(10, activation='softmax')
 
-    def call(self, inputs, training=False, base_trainable=False):
+    def call(self, inputs, training=False, base_trainable=True):
         x = UpSampling2D(size=(7, 7))(inputs)  # upsample 32, 32 to 224, 224 by multiplying with factor 7
         if not base_trainable:
             self.feature_extractor.trainable = False

@@ -240,7 +240,6 @@ def distance_until_class_change(logits_orig_train_arr, list_logits_neighbors):
 
     # make a numpy array out of the list for more efficient computation
     stuck = np.stack(list_logits_neighbors)
-    print(stuck.shape)
     neighbor_labels = np.argmax(stuck, axis=3)
 
     # get the original classes
@@ -250,7 +249,6 @@ def distance_until_class_change(logits_orig_train_arr, list_logits_neighbors):
     num_neighbors = list_logits_neighbors[0].shape[1]
 
     ground_truth_clas_repeat = np.repeat(ground_truth_clas, num_neighbors, axis=0).reshape(neighbor_labels.shape[1:])
-    print(ground_truth_clas_repeat.shape)
 
     # compare where the neighbors labes deviate from the original labels
     non_equal = ~np.equal(neighbor_labels, ground_truth_clas_repeat)

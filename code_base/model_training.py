@@ -34,7 +34,7 @@ def main(dataset='cifar10', model_name='cifar10_cnn', augment=True, batch_size=6
     callbacks = []
 
     if early_stop:
-        early_stop_callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=3, restore_best_weights=True)
+        early_stop_callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=3)
         callbacks.append(early_stop_callback)
 
     if log_training:

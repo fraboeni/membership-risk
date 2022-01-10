@@ -9,14 +9,18 @@ from code_base.utils import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
-MODEL_NAME = os.getcwd() + '../log_dir/models/cifar10/1004_cifar10_cnn'
-model = tf.keras.models.load_model('../log_dir/models/cifar10/1004_cifar10_cnn')
+MODEL_ID = 1004
+MODEL_NAME = os.getcwd() + '/../log_dir/models/cifar10/1004_cifar10_cnn'
+model = tf.keras.models.load_model(MODEL_NAME)
 NUM_DATA_POINTS = 1000
 WIDTH = 32
 HEIGHT = 32
 DEPTH = 3
 
-SCALES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2]
+USE_SOFTMAX = False
+
+EPSILONS = [0.1, 0.2, 0.5, 0.9, 1., 1.5] # we measure in L2 distance, for CIFAR10, 0.95 standard value until class change
+SCALE = 0.2
 NUM_NEIGHBORS = 100
 
 members, _ = get_data('cifar10', augmentation=False, batch_size=NUM_DATA_POINTS, indices_to_use=range(0, 25000))
@@ -38,8 +42,8 @@ test_acc = model.evaluate(non_members)[1]
 
 result_dict = {'train_acc': (train_acc), 'test_acc': (test_acc), 'num_samples': NUM_DATA_POINTS}
 
-for scale in SCALES:
-    print(scale)
+for eps in EPSILONS:
+    print(eps)
 
     # how many samples in this run?
     NUM_TOTAL = NUM_NEIGHBORS * NUM_DATA_POINTS
@@ -52,12 +56,16 @@ for scale in SCALES:
     for i in range(NUM_DATA_POINTS):
         all_neighbors_train[i * NUM_NEIGHBORS:(i + 1) * NUM_NEIGHBORS] = generate_neighboring_points(mem[i],
                                                                                                      NUM_NEIGHBORS,
-                                                                                                     scale=scale)
+                                                                                                     scale=SCALE,
+                                                                                                     epsilon=eps,
+                                                                                                     )
     # now make it a really ugly way to generate all the neighbors for the data points,
     for i in range(NUM_DATA_POINTS):
         all_neighbors_test[i * NUM_NEIGHBORS:(i + 1) * NUM_NEIGHBORS] = generate_neighboring_points(non_mem[i],
                                                                                                     NUM_NEIGHBORS,
-                                                                                                    scale=scale)
+                                                                                                    scale=SCALE,
+                                                                                                    epsilon=eps,
+                                                                                                    )
     # predict all points to obtain the logits
     all_neighbors_train_pred = model.predict(all_neighbors_train)
     all_neighbors_test_pred = model.predict(all_neighbors_test)
@@ -65,6 +73,12 @@ for scale in SCALES:
     # also for the original points
     logits_orig_train_arr = model.predict(mem[:NUM_DATA_POINTS])
     logits_orig_test_arr = model.predict(non_mem[:NUM_DATA_POINTS])
+
+    if USE_SOFTMAX:
+        all_neighbors_train_pred = tf.nn.softmax(all_neighbors_train_pred).numpy()
+        all_neighbors_test_pred = tf.nn.softmax(all_neighbors_test_pred).numpy()
+        logits_orig_train_arr = tf.nn.softmax(logits_orig_train_arr).numpy()
+        logits_orig_test_arr = tf.nn.softmax(logits_orig_test_arr).numpy()
 
     # reshape to batches per train data point
     all_neighbors_train_pred_resh = all_neighbors_train_pred.reshape(NUM_DATA_POINTS, NUM_NEIGHBORS,
@@ -103,7 +117,10 @@ for scale in SCALES:
     sub_dict['stds'] = (stds_train, stds_test)
     sub_dict['train_acc_neigh'] = train_acc_neighbors
     sub_dict['test_acc_neigh'] = test_acc_neighbors
-    result_dict[scale] = sub_dict
+    result_dict[eps] = sub_dict
 
-result_dir = os.getcwd() + '/../log_dir/result_data/exp01/'
+if USE_SOFTMAX:
+    result_dir = os.getcwd() + '/../log_dir/result_data/exp01/eps_{id}_softmax_'.format(id=MODEL_ID)
+else:
+    result_dir = os.getcwd() + '/../log_dir/result_data/exp01/eps_{id}_'.format(id=MODEL_ID)
 pickle.dump(result_dict, open(result_dir + "metrics.pkl", "wb"))

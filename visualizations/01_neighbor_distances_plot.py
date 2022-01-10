@@ -5,17 +5,30 @@ import numpy as np
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
+USE_SOFTMAX = False
+USE_EPS = False
+
+MODEL_ID = 1004
 dataset = 'cifar10'
-result_dir = os.getcwd() + '/../log_dir/result_data/exp01/'
-uid = '_1004'
-result_dict = pickle.load(open(result_dir + 'metrics'+uid+'.pkl', 'rb'))
+
+if USE_EPS:
+    result_dir = os.getcwd() + '/../log_dir/result_data/exp01/eps_'
+    SCALES = [0.1, 0.2, 0.5, 0.9, 1., 1.5]
+else:
+    result_dir = os.getcwd() + '/../log_dir/result_data/exp01/scale_'
+    SCALES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2]
+
+if USE_SOFTMAX:
+    result_dict = pickle.load(open(result_dir + '{id}_softmax_metrics.pkl'.format(id=MODEL_ID), 'rb'))
+else:
+    result_dict = pickle.load(open(result_dir + '{id}_metrics.pkl'.format(id=MODEL_ID), 'rb'))
 
 # extract general information
 num_samples = result_dict['num_samples']
 train_acc = result_dict['train_acc']
 test_acc = result_dict['test_acc']
 
-SCALES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2]
+
 
 # generate
 fig, axs = plt.subplots(len(SCALES), 5, figsize=(18, 18), sharey='row')
@@ -43,10 +56,19 @@ for i, scale in enumerate(SCALES):
         train_acc_neighbors = sub_dict['train_acc_neigh']
         test_acc_neighbors = sub_dict['test_acc_neigh']
 
-        strings = """ Noise Scale : {scale},metric: {metric}
-                        """.format(scale=scale,
-                                   metric=plot_name,
-                                   )
+        if USE_EPS:
+            strings = """ L2-eps:{scale}, metric: {metric}
+                                    """.format(scale=scale,
+                                               metric=plot_name,
+                                               )
+        else:
+            
+            strings = """ Noise Scale:{scale}, metric:{metric}
+                            """.format(scale=scale,
+                                       metric=plot_name,
+                                       )
+        if USE_SOFTMAX:
+            ax.set_yscale('log')
         ax.set_title(strings)
 
         legend = ['member', 'non-member']
@@ -57,5 +79,14 @@ for i, scale in enumerate(SCALES):
 fig.text(0.5, 0.001, 'metric over data points and their respective neighbors', ha='center')
 fig.text(0.001, 0.5, 'number of data points', va='center', rotation='vertical')
 fig.tight_layout()
-plt.savefig(os.getcwd() + "/01"+uid+".png")
+
+if USE_EPS:
+    output_dir = os.getcwd() + "/01_eps_"
+else:
+    output_dir = os.getcwd() + "/01_scale_"
+
+if USE_SOFTMAX:
+    plt.savefig(output_dir + "{id}_softmax.png".format(id=MODEL_ID))
+else:
+    plt.savefig(output_dir + "{id}.png".format(id=MODEL_ID))
 plt.show()

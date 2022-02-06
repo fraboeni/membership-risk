@@ -80,3 +80,9 @@ def add_weight_decay(model, kernel_regularizer, bias_regularizer):
         if hasattr(layer, 'bias_regularizer'):
             layer.kernel_regularizer = bias_regularizer
     return model
+
+
+MODELS = {
+    "cifar10_cnn": cifar10_cnn,
+    "cifar10_resnet50": cifar10_resnet50,
+}

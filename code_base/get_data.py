@@ -1,16 +1,12 @@
-import os
-import pickle
-import numpy as np
-import logging
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-
-
+from tensorflow.keras import layers
 
 SHAPES = {
     "cifar10": (32, 32, 3),
     "fmnist": (28, 28, 1),
 }
+
 
 def get_data(name, augmentation=False, batch_size=64, indices_to_use=None):
     """
@@ -46,6 +42,7 @@ def get_data(name, augmentation=False, batch_size=64, indices_to_use=None):
                                                width_shift_range=0.1,
                                                height_shift_range=0.1,
                                                horizontal_flip=True,
+                                               rotation_range=10,
                                                )
             train_generator = train_datagen.flow(
                 train_data, train_labels,
@@ -88,3 +85,13 @@ def get_data(name, augmentation=False, batch_size=64, indices_to_use=None):
         raise ValueError(f"unknown dataset {name}")
 
     return train_generator, test_generator
+
+
+def data_augmentation():
+    data_augmentation_net = tf.keras.Sequential([
+        layers.RandomFlip("horizontal"),
+        layers.RandomRotation(0.2),
+        layers.RandomTranslation(height_factor=0.1, width_factor=0.1)
+
+    ])
+    return data_augmentation_net

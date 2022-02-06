@@ -2,13 +2,13 @@ import os
 import tensorflow as tf
 import numpy as np
 
-from sklearn.preprocessing import minmax_scale
+
 from code_base.get_data import get_data, data_augmentation
 from code_base.models import *
 from keras.regularizers import l2
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-AUTOTUNE = tf.data.AUTOTUNE
+
 
 
 def main(dataset='cifar10', model_name='cifar10_resnet50', augment=False, batch_size=64, lr=0.001, optim="Adam",
@@ -16,26 +16,12 @@ def main(dataset='cifar10', model_name='cifar10_resnet50', augment=False, batch_
          logdir='log_dir/models/', from_logits=True, kernel_regularizer=l2(0.0001), bias_regularizer=l2(0.0001),
          data_dir='log_dir/result_data/experiments_64-20220204T144927Z-001/experiments_64'):
     # when data dir is not specified, we use the keras dataset, otherwise, we load data from disk
-    if data_dir is None:
-        train_data, test_data = get_data(dataset, augmentation=augment, batch_size=batch_size,
-                                         indices_to_use=range(0, 25000))
-    else:
-        load_location = os.getcwd() + '/../' + data_dir
-        x = np.load(load_location + "/x_train.npy")
-        x_scaled = minmax_scale(x.flatten(), feature_range=(0, 1)).reshape(50000, 32, 32, 3)  # scale to range(0,1)
-        y = np.load(load_location + "/y_train.npy")
 
-        # todo: always chose different samples
-        # keep = np.random.uniform(0, 1, size=())
-        train_data = tf.data.Dataset.from_tensor_slices((x_scaled[:25000], y[:25000]))
-        test_data = tf.data.Dataset.from_tensor_slices((x_scaled[25000:], y[25000:]))
+    # todo: always chose different samples
+    keep = range(0, 25000) #np.random.uniform(0, 1, size=())
+    train_data, test_data = get_data(dataset, augmentation=augment, batch_size=batch_size,
+                                         indices_to_use=keep, data_dir=data_dir)
 
-        train_data = train_data.shuffle(25000).batch(batch_size)
-        test_data = test_data.batch(batch_size)
-
-        if augment:
-            train_data = train_data.map(lambda x, y: (data_augmentation(x, training=True), y),
-                                        num_parallel_calls=AUTOTUNE)
 
     if optim == "SGD":
         optimizer = tf.keras.optimizers.SGD(learning_rate=lr,

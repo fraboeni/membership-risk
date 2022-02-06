@@ -229,14 +229,14 @@ class DkNNModel(Model):
         # Compute training data activations
         self.nb_train = train_labels.shape[0]
         assert self.nb_train == train_data.shape[0]
-        print("Getting activations for training data")
+        #print("Getting activations for training data")
         self.train_activations = get_activations(train_data)
-        print("Received activations for training data")
+        #print("Received activations for training data")
         self.train_labels = train_labels
 
         # Build locality-sensitive hashing tables for training representations
         self.train_activations_lsh = copy.copy(self.train_activations)
-        print("Initializing locality-sensitive hashing")
+        #print("Initializing locality-sensitive hashing")
         self.init_lsh()
 
     def init_lsh(self):
@@ -442,7 +442,7 @@ class DkNNModel(Model):
         self.cali_activations = self.get_activations(cali_data)
         self.cali_labels = cali_labels
 
-        print("Starting calibration of DkNN.")
+        #print("Starting calibration of DkNN.")
         cali_knns_ind, cali_knns_labels, _ = self.find_train_knns(self.cali_activations)
         assert all(
             [v.shape == (self.nb_cali, self.neighbors) for v in cali_knns_ind.values()]
@@ -457,13 +457,8 @@ class DkNNModel(Model):
         cali_knns_not_in_class = self.nonconformity(cali_knns_labels)
         cali_knns_not_in_l = np.zeros(self.nb_cali, dtype=np.int32)
         for i in range(self.nb_cali):
-            # TODO which knns are not in same class as calibration point, per layer/ or better label?
             cali_knns_not_in_l[i] = cali_knns_not_in_class[i, cali_labels[i]]
         cali_knns_not_in_l_sorted = np.sort(cali_knns_not_in_l)
-        # TODO throws error, when cali_knns_not_in_l_sorted are all zero --> cali_nonconformity [] --> nb_cali = 0
         self.cali_nonconformity = np.trim_zeros(cali_knns_not_in_l_sorted, trim="f")
-        # TODO: correct to build it in here? If all neighbors have same label as point, nb_cali shape should be 1 instead of 0?
-        # TODO why change it anyways? Says that neighbors are not the same, amount of neighbors that are different, why is that important for amount of cali points?
-        # self.nb_cali = self.cali_nonconformity.shape[0]
         self.calibrated = True
-        print("DkNN calibration complete.")
+        #print("DkNN calibration complete.")
